@@ -267,7 +267,5 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-cv.addEventListener("click", init);
-addEventListener("keydown", e => { if (e.key === " " || e.key.toLowerCase() === "r") init(); });
-init();
-requestAnimationFrame(loop);
+cv.addEventListener("click", init);                 // tap the heart to replay
+window.startHeart = function () { init(); requestAnimationFrame(loop); };

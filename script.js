@@ -1,4 +1,4 @@
-```javascript
+
 // ============================================
 // LOVE HEART ❤️
 // Browser version of the original Python art
@@ -539,4 +539,3 @@ async function initialize() {
 }
 
 initialize();
-```

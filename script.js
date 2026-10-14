@@ -1,541 +1,273 @@
+"use strict";
+/* Browser port of heart.py (turtle/tkinter -> HTML canvas). Click/tap to replay. */
 
-// ============================================
-// LOVE HEART ❤️
-// Browser version of the original Python art
-// ============================================
-
-const canvas = document.getElementById("heartCanvas");
-const ctx = canvas.getContext("2d");
-const replayButton = document.getElementById("replayButton");
-
-// Original animation settings
-const SC = 21;
-const OY = 20;
-const DURATION = 10000;
-const ANIM = 42;
-const TICK = 16;
-const LIFT = 34;
-const GAP = 7;
+const SC = 21, OY = 20, DURATION = 10, TICK = 16, ANIM = 42, LIFT = 34, GAP = 7;
 const SIZES = [9, 10, 11, 12];
-const FONT = "Arial, Helvetica, sans-serif";
-
+const FONT = "Arial";
 const BG = "#060208";
-const FLASH = [1.0, 0.78, 0.78];
+const W = 800, H = 800;
+const TAU = 2 * Math.PI;
 
 const PHRASES = [
-    "I love you",
-    "Seni seviyorum",
-    "Te amo",
-    "Je t'aime",
-    "Ich liebe dich",
-    "Ti amo",
-    "Eu te amo",
-    "Я тебя люблю",
-    "사랑해",
-    "愛してる",
-    "我爱你",
-    "मैं तुमसे प्यार करता हूँ",
-    "Σ' αγαπώ",
-    "Ik hou van jou",
-    "Jag älskar dig",
-    "Kocham cię",
-    "ฉันรักเธอ",
-    "Anh yêu em",
-    "Aku cinta kamu",
-    "Я тебе кохаю"
+  "I love you", "Seni seviyorum", "Te amo", "Je t'aime",
+  "Ich liebe dich", "Ti amo", "Eu te amo", "Я тебя люблю",
+  "사랑해", "愛してる", "我爱你", "मैं तुमसे प्यार करता हूँ",
+  "Σ' αγαπώ", "Ik hou van jou", "Jag älskar dig", "Kocham cię",
+  "ฉันรักเธอ", "Anh yêu em", "Aku cinta kamu", "Я тебе кохаю",
 ];
 
-const W = 800;
-const H = 800;
-const CENTER_X = W / 2;
-const CENTER_Y = H / 2;
+/* ---------- canvas ---------- */
+const cv = document.getElementById("c");
+const ctx = cv.getContext("2d");
+function fit() {
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = W * s + "px";
+  cv.style.height = H * s + "px";
+  cv.width = Math.round(W * s * dpr);
+  cv.height = Math.round(H * s * dpr);
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+}
+addEventListener("resize", fit);
+fit();
 
-let placements = [];
-let startTime = 0;
-let animationFrame = null;
-let randomSeed = 11;
-
-// ============================================
-// SEEDED RANDOM GENERATOR
-// ============================================
-
-function random() {
-    randomSeed =
-        (randomSeed * 1664525 + 1013904223) >>> 0;
-
-    return randomSeed / 4294967296;
+/* ---------- helpers (same roles as in heart.py) ---------- */
+function mulberry32(a) {                       // seeded RNG, like random.Random(11)
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let rand = mulberry32(11);
+const uniform = (a, b) => a + (b - a) * rand();
+const choice = arr => arr[Math.floor(rand() * arr.length)];
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
 }
 
-function shuffle(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(random() * (i + 1));
+const px = pt => pt * 4 / 3;                   // Tk points -> CSS pixels (96 dpi)
+const fontStr = size => `bold ${px(size)}px ${FONT}, sans-serif`;
+function measure(text, size) { ctx.font = fontStr(size); return ctx.measureText(text).width; }
+const linespace = size => Math.round(px(size) * 1.15);
 
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-
-    return array;
-}
-
-// ============================================
-// HEART MATHEMATICS
-// ============================================
+const clamp = v => Math.max(0, Math.min(1, v));
+const hx = c => "#" + c.map(v => Math.floor(clamp(v) * 255).toString(16).padStart(2, "0")).join("");
+const mix = (a, b, k) => a.map((p, i) => p + (b[i] - p) * k);
+const dim = (c, k) => c.map(v => v * k);
 
 function heart(a) {
-    const x = 16 * Math.pow(Math.sin(a), 3);
-
-    const y =
-        13 * Math.cos(a)
-        - 5 * Math.cos(2 * a)
-        - 2 * Math.cos(3 * a)
-        - Math.cos(4 * a);
-
-    return [
-        x * SC,
-        y * SC + OY
-    ];
+  const x = 16 * Math.sin(a) ** 3;
+  const y = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a);
+  return [x * SC, y * SC + OY];
 }
 
-// ============================================
-// COLOR HELPERS
-// ============================================
+const POLY = Array.from({ length: 720 }, (_, i) => heart(TAU * i / 720));
+const EDGES = POLY.map((p, i) => [p, POLY[(i + 1) % POLY.length]]);
+const YMAX = Math.max(...POLY.map(p => p[1]));
+const YMIN = Math.min(...POLY.map(p => p[1]));
+const CY = (YMAX + YMIN) / 2;
 
-function mix(a, b, amount) {
-    return a.map(
-        (value, i) =>
-            value + (b[i] - value) * amount
-    );
+function spans(y) {
+  const xs = [];
+  for (const [[x1, y1], [x2, y2]] of EDGES) {
+    if ((y1 <= y && y < y2) || (y2 <= y && y < y1)) xs.push(x1 + (y - y1) * (x2 - x1) / (y2 - y1));
+  }
+  xs.sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i + 1 < xs.length; i += 2) out.push([xs[i], xs[i + 1]]);
+  return out;
 }
 
-function dim(color, amount) {
-    return color.map(value => value * amount);
+function intersect(A, B) {
+  const out = [];
+  for (const a of A) for (const b of B) {
+    const lo = Math.max(a[0], b[0]), hi = Math.min(a[1], b[1]);
+    if (hi - lo > 14) out.push([lo, hi]);
+  }
+  return out;
 }
 
-function toHex(color) {
-    return "#" + color
-        .map(value =>
-            Math.round(
-                Math.max(0, Math.min(1, value)) * 255
-            )
-            .toString(16)
-            .padStart(2, "0")
-        )
-        .join("");
+let bag = [];
+function nextPhrase() {                        // phrase_cycle(): shuffled rounds
+  if (!bag.length) { bag = PHRASES.slice(); shuffle(bag); bag.reverse(); }
+  return bag.pop();
 }
 
-function clamp(value) {
-    return Math.max(0, Math.min(1, value));
-}
+const mdist = (x, y) => Math.hypot(x / (16 * SC), (y - CY) / (14.5 * SC));
 
-const BGC = [6 / 255, 2 / 255, 8 / 255];
+/* ---------- layout (build()) ---------- */
+function build() {
+  bag = [];
+  const rowH = Math.max(...SIZES.map(linespace)) + 4;
+  const half = rowH / 2;
+  const placed = [];
 
-// ============================================
-// CREATE HEART SHAPE
-// ============================================
+  let y = YMAX - half;
+  while (y > YMIN + half) {
+    const row = intersect(spans(y + half), spans(y - half));
+    for (let [lo, hi] of row) {
+      lo += 4; hi -= 4;
+      let cur = lo + uniform(0, 8);
+      const line = [];
 
-function buildHeart() {
-    randomSeed = 11;
-
-    const points = [];
-
-    for (let i = 0; i < 720; i++) {
-        points.push(
-            heart(2 * Math.PI * i / 720)
-        );
-    }
-
-    const edges = points.map((point, i) => [
-        point,
-        points[(i + 1) % points.length]
-    ]);
-
-    const ys = points.map(point => point[1]);
-
-    const YMAX = Math.max(...ys);
-    const YMIN = Math.min(...ys);
-    const CY = (YMAX + YMIN) / 2;
-
-    // Find horizontal intersections with the heart.
-    function spans(y) {
-        const xs = [];
-
-        for (const [[x1, y1], [x2, y2]] of edges) {
-            if (
-                (y1 <= y && y < y2) ||
-                (y2 <= y && y < y1)
-            ) {
-                xs.push(
-                    x1 + (y - y1) * (x2 - x1) / (y2 - y1)
-                );
-            }
+      for (;;) {
+        let fit = null;
+        for (let k = 0; k < 10; k++) {
+          const text = nextPhrase();
+          const size = choice(SIZES);
+          const w = measure(text, size);
+          if (cur + w <= hi) { fit = { text, size, w }; break; }
         }
+        if (!fit) break;
+        line.push({ x: cur + fit.w / 2, text: fit.text, size: fit.size, w: fit.w });
+        cur += fit.w + GAP;
+      }
+      if (!line.length) continue;
 
-        xs.sort((a, b) => a - b);
+      if (line.length > 1) {
+        const last = line[line.length - 1];
+        const left = hi - (last.x + last.w / 2);
+        line.forEach((it, i) => { it.x += left * i / (line.length - 1); });
+      } else {
+        line[0].x = (lo + hi) / 2;
+      }
 
-        const result = [];
-
-        for (let i = 0; i + 1 < xs.length; i += 2) {
-            result.push([xs[i], xs[i + 1]]);
-        }
-
-        return result;
+      line.forEach((it, i) => {
+        placed.push({ x: it.x, y, text: it.text, size: it.size, edge: i === 0 || i === line.length - 1 });
+      });
     }
+    y -= rowH;
+  }
 
-    function intersect(A, B) {
-        const result = [];
+  const wine = [0.58, 0.0, 0.09], crimson = [0.90, 0.05, 0.14], blood = [0.98, 0.10, 0.16];
+  for (const p of placed) {
+    const rad = Math.min(1, mdist(p.x, p.y));
+    let base = mix(wine, crimson, 0.25 + 0.75 * rad);
+    base = mix(base, blood, uniform(0, 0.35) + (p.edge ? 0.3 : 0));
+    p.color = base.map(v => Math.min(1, v));
+    p.rad = rad;
+  }
 
-        for (const a of A) {
-            for (const b of B) {
-                const lo = Math.max(a[0], b[0]);
-                const hi = Math.min(a[1], b[1]);
-
-                if (hi - lo > 14) {
-                    result.push([lo, hi]);
-                }
-            }
-        }
-
-        return result;
-    }
-
-    // Cycle through phrases in shuffled order.
-    let phraseList = [];
-    let phraseIndex = 0;
-
-    function nextPhrase() {
-        if (phraseIndex >= phraseList.length) {
-            phraseList = shuffle(PHRASES.slice());
-            phraseIndex = 0;
-        }
-
-        return phraseList[phraseIndex++];
-    }
-
-    function measure(text, size) {
-        ctx.font = `bold ${size}px ${FONT}`;
-
-        return ctx.measureText(text).width;
-    }
-
-    const rowHeight = 17;
-    const half = rowHeight / 2;
-    const placed = [];
-
-    // Fill the heart row by row.
-    for (
-        let y = YMAX - half;
-        y > YMIN + half;
-        y -= rowHeight
-    ) {
-        const rows = intersect(
-            spans(y + half),
-            spans(y - half)
-        );
-
-        for (const [left, right] of rows) {
-            const lo = left + 4;
-            const hi = right - 4;
-
-            let current = lo + random() * 8;
-            const line = [];
-
-            while (true) {
-                let fit = null;
-
-                for (let attempt = 0; attempt < 10; attempt++) {
-                    const text = nextPhrase();
-
-                    const size =
-                        SIZES[
-                            Math.floor(random() * SIZES.length)
-                        ];
-
-                    const width = measure(text, size);
-
-                    if (current + width <= hi) {
-                        fit = { text, size, width };
-                        break;
-                    }
-                }
-
-                if (!fit) break;
-
-                line.push({
-                    x: current + fit.width / 2,
-                    y,
-                    text: fit.text,
-                    size: fit.size,
-                    width: fit.width
-                });
-
-                current += fit.width + GAP;
-            }
-
-            if (line.length === 0) continue;
-
-            // Spread text evenly across each row.
-            if (line.length > 1) {
-                const last = line[line.length - 1];
-
-                const leftover =
-                    hi - (last.x + last.width / 2);
-
-                line.forEach((item, i) => {
-                    item.x += leftover * i / (line.length - 1);
-                });
-            } else {
-                line[0].x = (lo + hi) / 2;
-            }
-
-            line.forEach((item, i) => {
-                item.edge =
-                    i === 0 || i === line.length - 1;
-
-                item.rad = Math.min(
-                    1,
-                    Math.hypot(
-                        item.x / (16 * SC),
-                        (item.y - CY) / (14.5 * SC)
-                    )
-                );
-
-                const wine = [0.58, 0.0, 0.09];
-                const crimson = [0.90, 0.05, 0.14];
-                const blood = [0.98, 0.10, 0.16];
-
-                let color = mix(
-                    wine,
-                    crimson,
-                    0.25 + 0.75 * item.rad
-                );
-
-                color = mix(
-                    color,
-                    blood,
-                    random() * 0.35 +
-                    (item.edge ? 0.3 : 0)
-                );
-
-                item.color = color.map(
-                    value => Math.min(1, value)
-                );
-
-                item.dx = random() * 20 - 10;
-
-                placed.push(item);
-            });
-        }
-    }
-
-    // Reveal the outline before filling the inside.
-    const outline = placed.filter(item => item.edge);
-    const inside = placed.filter(item => !item.edge);
-
-    outline.sort(
-        (a, b) =>
-            Math.atan2(a.x, a.y - CY) -
-            Math.atan2(b.x, b.y - CY)
-    );
-
-    inside.sort((a, b) => b.rad - a.rad);
-
-    placements = outline.concat(inside);
+  const edges = placed.filter(p => p.edge);
+  const inner = placed.filter(p => !p.edge);
+  edges.forEach(p => { p.key = (((Math.atan2(p.x, p.y - CY)) % TAU) + TAU) % TAU; });
+  edges.sort((a, b) => a.key - b.key);
+  inner.forEach(p => { p.key = -p.rad + uniform(0, 0.08); });
+  inner.sort((a, b) => a.key - b.key);
+  return edges.concat(inner);
 }
 
-// ============================================
-// DRAW ONE ANIMATION FRAME
-// ============================================
+/* ---------- animation ---------- */
+const FLASH = [1.0, 0.78, 0.78];
+const BGC = [1, 3, 5].map(i => parseInt(BG.slice(i, i + 2), 16) / 255);
+
+let ORDER, idx, RATE, acc, spawning, spawned, active, shimmerOn, nextShimmer, startAt;
+
+function init() {
+  rand = mulberry32(11);
+  ORDER = build();
+  idx = 0;
+  RATE = ORDER.length / (DURATION * 1000 / TICK);
+  acc = 0; spawning = true; spawned = []; active = [];
+  shimmerOn = false; nextShimmer = 0;
+  startAt = performance.now() + 200;
+}
+
+function spawn(p) {
+  p.cx = W / 2 + p.x;
+  p.cy = H / 2 - p.y;
+  p.f = 0;
+  p.dx = uniform(-10, 10);
+  p.sh = BGC; p.ha = BGC; p.mc = BGC;
+  p.hx = p.cx; p.hy = p.cy;
+  p.mx = p.cx; p.my = p.cy - LIFT;
+  p.litUntil = 0;
+  spawned.push(p);
+  active.push(p);
+}
+
+function animate(p) {
+  p.f += 1;
+  const u = clamp(p.f / ANIM);
+  const e = 1 - (1 - u) ** 3;
+  const c = p.color;
+  const px_ = p.cx + p.dx * (1 - e);
+  const py_ = p.cy - (1 - e) * LIFT;
+
+  p.sh = mix(BGC, dim(c, 0.30), e);
+  p.ha = mix(BGC, dim(c, 0.20), e * e);
+  p.hx = px_; p.hy = py_;
+
+  const flash = 0.75 * Math.sin(Math.PI * clamp((u - 0.55) / 0.45));
+  p.mc = mix(mix(BGC, c, e ** 1.5), FLASH, flash);
+  p.mx = px_; p.my = py_;
+
+  if (u >= 1) {
+    p.hx = p.cx; p.hy = p.cy;
+    p.mx = p.cx; p.my = p.cy;
+    p.mc = c;
+    return false;
+  }
+  return true;
+}
+
+function step() {
+  if (spawning) {
+    acc += RATE;
+    while (acc >= 1) {
+      acc -= 1;
+      if (idx >= ORDER.length) { spawning = false; break; }
+      spawn(ORDER[idx++]);
+    }
+  }
+  active = active.filter(animate);
+  if (!spawning && !active.length) shimmerOn = true;
+}
 
 function draw(now) {
-    ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
 
-    ctx.fillStyle = BG;
-    ctx.fillRect(0, 0, W, H);
+  if (shimmerOn && now >= nextShimmer) {        // shimmer(): flash a random phrase for 260 ms
+    const p = choice(spawned);
+    p.litUntil = now + 260;
+    nextShimmer = now + 140;
+  }
 
-    const elapsed = Math.max(0, now - startTime);
+  for (const p of spawned) {
+    ctx.font = fontStr(p.size);
+    ctx.fillStyle = hx(p.sh);
+    ctx.fillText(p.text, p.cx + 2, p.cy + 3);                 // shadow
 
-    const revealRate =
-        DURATION / Math.max(1, placements.length);
+    ctx.font = fontStr(p.size + 1);
+    ctx.fillStyle = hx(p.ha);
+    ctx.fillText(p.text, p.hx, p.hy);                         // halo
 
-    placements.forEach((item, index) => {
-        const localTime = elapsed - index * revealRate;
-
-        if (localTime < 0) return;
-
-        const u = clamp(
-            localTime / (ANIM * TICK)
-        );
-
-        // Smooth easing, similar to the Python animation.
-        const eased = 1 - Math.pow(1 - u, 3);
-
-        const x = CENTER_X + item.x +
-            item.dx * (1 - eased);
-
-        const baseY = CENTER_Y - item.y;
-
-        const y = baseY -
-            (1 - eased) * LIFT;
-
-        const shadow = mix(
-            BGC,
-            dim(item.color, 0.30),
-            eased
-        );
-
-        const halo = mix(
-            BGC,
-            dim(item.color, 0.20),
-            eased * eased
-        );
-
-        const flash =
-            0.75 * Math.sin(
-                Math.PI * clamp((u - 0.55) / 0.45)
-            );
-
-        const mainColor = mix(
-            mix(
-                BGC,
-                item.color,
-                Math.pow(eased, 1.5)
-            ),
-            FLASH,
-            flash
-        );
-
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-
-        // Shadow.
-        ctx.font = `bold ${item.size}px ${FONT}`;
-        ctx.fillStyle = toHex(shadow);
-
-        ctx.fillText(
-            item.text,
-            x + 2,
-            y + 3
-        );
-
-        // Soft glow.
-        ctx.font = `bold ${item.size + 1}px ${FONT}`;
-        ctx.fillStyle = toHex(halo);
-
-        ctx.shadowColor = toHex(
-            dim(item.color, 0.65)
-        );
-
-        ctx.shadowBlur = u >= 1 ? 4 : 0;
-
-        ctx.fillText(item.text, x, y);
-
-        ctx.shadowBlur = 0;
-
-        // Main phrase.
-        ctx.font = `bold ${item.size}px ${FONT}`;
-        ctx.fillStyle = toHex(
-            u >= 1 ? item.color : mainColor
-        );
-
-        ctx.fillText(
-            item.text,
-            u >= 1 ? CENTER_X + item.x : x,
-            u >= 1 ? baseY : y
-        );
-    });
-
-    // Gentle glowing outline after the heart forms.
-    const doneAt =
-        placements.length * revealRate +
-        ANIM * TICK;
-
-    if (elapsed > doneAt) {
-        const pulse = (Math.sin(now / 700) + 1) / 2;
-
-        ctx.save();
-
-        ctx.globalAlpha = 0.06 + pulse * 0.07;
-        ctx.strokeStyle = "#ff355f";
-        ctx.lineWidth = 2;
-        ctx.shadowColor = "#ff174e";
-        ctx.shadowBlur = 24;
-
-        ctx.beginPath();
-
-        for (let i = 0; i <= 240; i++) {
-            const [hx, hy] =
-                heart(i / 240 * Math.PI * 2);
-
-            const px = CENTER_X + hx;
-            const py = CENTER_Y - hy;
-
-            if (i === 0) {
-                ctx.moveTo(px, py);
-            } else {
-                ctx.lineTo(px, py);
-            }
-        }
-
-        ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
-    }
-
-    animationFrame = requestAnimationFrame(draw);
+    ctx.font = fontStr(p.size);
+    ctx.fillStyle = hx(now < p.litUntil ? mix(p.color, FLASH, 0.6) : p.mc);
+    ctx.fillText(p.text, p.mx, p.my);                         // main text
+  }
 }
 
-// ============================================
-// START OR REPLAY THE ANIMATION
-// ============================================
-
-function startAnimation() {
-    if (animationFrame !== null) {
-        cancelAnimationFrame(animationFrame);
-    }
-
-    buildHeart();
-
-    startTime = performance.now();
-
-    animationFrame = requestAnimationFrame(draw);
+let last = performance.now(), accum = 0;
+function loop(now) {
+  accum += Math.min(now - last, 200);
+  last = now;
+  if (now >= startAt) {
+    while (accum >= TICK) { accum -= TICK; step(); }
+  } else accum = 0;
+  draw(now);
+  requestAnimationFrame(loop);
 }
 
-replayButton.addEventListener("click", startAnimation);
-
-// Support high-resolution displays and mobile screens.
-function resizeCanvas() {
-    const rect = canvas.getBoundingClientRect();
-
-    if (!rect.width) return;
-
-    const dpr = Math.min(
-        window.devicePixelRatio || 1,
-        2
-    );
-
-    canvas.width = Math.round(W * dpr);
-    canvas.height = Math.round(H * dpr);
-
-    ctx.setTransform(
-        dpr, 0,
-        0, dpr,
-        0, 0
-    );
-
-    ctx.imageSmoothingEnabled = true;
-}
-
-window.addEventListener("resize", () => {
-    resizeCanvas();
-});
-
-// Wait for fonts before measuring the phrases.
-async function initialize() {
-    if (document.fonts && document.fonts.ready) {
-        await document.fonts.ready;
-    }
-
-    resizeCanvas();
-    startAnimation();
-}
-
-initialize();
+cv.addEventListener("click", init);
+addEventListener("keydown", e => { if (e.key === " " || e.key.toLowerCase() === "r") init(); });
+init();
+requestAnimationFrame(loop);

@@ -9,6 +9,35 @@
 </head>
 <body>
   <canvas id="c" width="800" height="800" aria-label="A heart made of I love you in many languages"></canvas>
+
+  <audio id="bgm" src="music.mp3" loop preload="auto"></audio>
+
+  <!-- black start screen -->
+  <div id="gate">
+    <button id="gateBtn" type="button">I made something for you ♥</button>
+  </div>
+
+  <!-- small mute button, appears only after the start tap -->
+  <button id="musicBtn" type="button" hidden>♫ Pause music</button>
+
   <script src="script.js"></script>
+  <script>
+    const bgm = document.getElementById("bgm");
+    const gate = document.getElementById("gate");
+    const musicBtn = document.getElementById("musicBtn");
+    bgm.volume = 0.7;
+
+    document.getElementById("gateBtn").addEventListener("click", () => {
+      bgm.play().catch(() => {});      // allowed because it happens inside the tap
+      gate.classList.add("gone");
+      musicBtn.hidden = false;
+      startHeart();
+    });
+
+    function sync() { musicBtn.textContent = bgm.paused ? "♫ Play music" : "♫ Pause music"; }
+    musicBtn.addEventListener("click", () => { bgm.paused ? bgm.play().catch(() => {}) : bgm.pause(); });
+    bgm.addEventListener("play", sync);
+    bgm.addEventListener("pause", sync);
+  </script>
 </body>
 </html>

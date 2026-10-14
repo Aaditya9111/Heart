@@ -1,0 +1,161 @@
+```css
+/* ===== BASIC RESET ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    background: #060208;
+}
+
+body {
+    min-height: 100vh;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #ffe7ec;
+    background: #060208;
+    overflow-x: hidden;
+}
+
+/* ===== MAIN CONTAINER ===== */
+.container {
+    min-height: 100vh;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 12px 12px 28px;
+
+    background:
+        radial-gradient(
+            ellipse at center,
+            rgba(100, 0, 30, 0.20),
+            transparent 65%
+        ),
+        #060208;
+}
+
+/* ===== ANIMATED HEART CANVAS ===== */
+#heartCanvas {
+    display: block;
+    width: min(94vw, 760px);
+    height: auto;
+    aspect-ratio: 1 / 1;
+    max-height: 78svh;
+}
+
+/* ===== MESSAGE BELOW THE HEART ===== */
+.love-message {
+    text-align: center;
+    margin-top: -5px;
+    padding: 0 12px;
+    animation: fadeIn 1.5s ease both;
+}
+
+.subtitle {
+    color: #d79aa8;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: 10px;
+    margin-bottom: 7px;
+}
+
+.love-message h1 {
+    font-size: clamp(21px, 4vw, 30px);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.love-message h1 span {
+    color: #ff4567;
+    text-shadow: 0 0 12px rgba(255, 40, 90, 0.7);
+}
+
+.description {
+    color: #c8aab4;
+    font-size: clamp(11px, 2.5vw, 14px);
+    line-height: 1.6;
+    margin-top: 8px;
+}
+
+/* ===== REPLAY BUTTON ===== */
+#replayButton {
+    margin-top: 15px;
+    border: 1px solid rgba(255, 126, 153, 0.45);
+    border-radius: 999px;
+    padding: 10px 19px;
+
+    color: #ffe7ec;
+    background: rgba(120, 13, 43, 0.24);
+
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+
+    transition:
+        background 0.25s ease,
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+#replayButton:hover {
+    background: rgba(160, 20, 55, 0.42);
+    box-shadow: 0 0 18px rgba(255, 40, 90, 0.15);
+}
+
+#replayButton:active {
+    transform: scale(0.96);
+}
+
+#replayButton:focus-visible {
+    outline: 2px solid #ff7894;
+    outline-offset: 4px;
+}
+
+/* ===== ENTRANCE ANIMATION ===== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== SMALL SCREENS ===== */
+@media (max-height: 650px) {
+    .container {
+        padding-top: 5px;
+        padding-bottom: 12px;
+    }
+
+    #heartCanvas {
+        width: min(88vw, 68svh);
+        max-height: 68svh;
+    }
+
+    .love-message {
+        margin-top: 0;
+    }
+
+    #replayButton {
+        margin-top: 9px;
+    }
+}
+
+/* Respect the visitor's reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .love-message {
+        animation: none;
+    }
+
+    #replayButton {
+        transition: none;
+    }
+}
+```
